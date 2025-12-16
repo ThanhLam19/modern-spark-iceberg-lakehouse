@@ -1,0 +1,28 @@
+# 1. FILE HẠ TẦNG VÀ DỮ LIỆU
+# Bỏ qua các thư mục chứa dữ liệu vật lý của IcebergMinIODocker
+data
+logs
+tmp
+
+# Bỏ qua MinIO console files
+.minio.sys
+
+# File tạmcache của Docker
+.dockerignore
+docker-compose.yml.orig
+
+# 2. PYTHON VÀ JUPYTER NOTEBOOK
+# Thư mục cache và compiled files của Python
+__pycache__
+.pyc
+venv
+.venv
+
+# File tạm thời của Jupyter Notebook
+.ipynb_checkpoints
+
+# 3. FILE HỆ ĐIỀU HÀNH VÀ EDITOR
+.DS_Store
+Thumbs.db
+.vscode
+.idea
