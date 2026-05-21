@@ -1,11 +1,11 @@
 # 1. FILE HẠ TẦNG VÀ DỮ LIỆU
 # Bỏ qua các thư mục chứa dữ liệu vật lý của IcebergMinIODocker
-data
-logs
-tmp
+data/
+logs/
+tmp/
 
 # Bỏ qua MinIO console files
-.minio.sys
+.minio.sys/
 
 # File tạmcache của Docker
 .dockerignore
@@ -13,16 +13,30 @@ docker-compose.yml.orig
 
 # 2. PYTHON VÀ JUPYTER NOTEBOOK
 # Thư mục cache và compiled files của Python
-__pycache__
-.pyc
-venv
-.venv
+__pycache__/
+*.pyc
+venv/
+.venv/
 
 # File tạm thời của Jupyter Notebook
-.ipynb_checkpoints
+.ipynb_checkpoints/
 
 # 3. FILE HỆ ĐIỀU HÀNH VÀ EDITOR
 .DS_Store
 Thumbs.db
-.vscode
-.idea
+.vscode/
+.idea/
+
+# 4. FILE CẤU HÌNH BẢO MẬT
+.env
+.env.*
+
+# 5. SPARK / ICEBERG METADATA & CHECKPOINTS
+*.crc
+**/*.crc
+**/warehouse/checkpoints/
+**/metadata/
+
+# 6. LOGS VÀ DATABASE TẠM THỜI
+derby.log
+metastore_db/
