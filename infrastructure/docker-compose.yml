@@ -1,7 +1,4 @@
 services:
-  # ==========================================
-  # HỆ SINH THÁI DATA LAKEHOUSE HIỆN TẠI
-  # ==========================================
   mc:
     depends_on:
       - minio
@@ -14,11 +11,10 @@ services:
     entrypoint: >
       /bin/sh -c "
       until (/usr/bin/mc alias set minio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}) do echo '...waiting...' && sleep 1; done;
-      /usr/bin/mc rm -r --force minio/warehouse || true;
       /usr/bin/mc mb minio/warehouse || true;
       /usr/bin/mc policy set public minio/warehouse;
       tail -f /dev/null
-      "      
+      "
     networks:
       iceberg_net:
 
@@ -36,18 +32,26 @@ services:
     networks:
       iceberg_net:
     volumes:
-      - minio-data:/data
+      - minio-data:/data          # ✅ Đã có sẵn
 
   nessie:
     image: projectnessie/nessie:0.50.0
     container_name: nessie
+    user: "root"
     ports:
       - 19120:19120
+    # FIX 1: Thêm config để Nessie dùng RocksDB thay vì in-memory
+    environment:
+      - NESSIE_VERSION_STORE_TYPE=ROCKS
+      - NESSIE_VERSION_STORE_PERSIST_ROCKS_DATABASE_PATH=/nessie/data
+    # FIX 2: Mount volume để catalog metadata không mất khi restart
+    volumes:
+      - nessie-data:/nessie/data
     networks:
       iceberg_net:
 
   spark-iceberg:
-    image: tabulario/spark-iceberg # <-- Thay vì tự build, dùng luôn image chuẩn này
+    image: tabulario/spark-iceberg
     container_name: spark-iceberg
     environment:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
@@ -58,14 +62,17 @@ services:
     command:
       - |
         echo '📦 Downloading Kafka JARs...' &&
-        wget -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/spark/spark-sql-kafka-0-10_2.12/3.5.1/spark-sql-kafka-0-10_2.12-3.5.1.jar &&
-        wget -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.12/3.5.1/spark-token-provider-kafka-0-10_2.12-3.5.1.jar &&
-        wget -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.4.0/kafka-clients-3.4.0.jar &&
-        wget -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.12.0/commons-pool2-2.12.0.jar &&
+        wget -nc -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/spark/spark-sql-kafka-0-10_2.12/3.5.1/spark-sql-kafka-0-10_2.12-3.5.1.jar &&
+        wget -nc -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.12/3.5.1/spark-token-provider-kafka-0-10_2.12-3.5.1.jar &&
+        wget -nc -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.4.0/kafka-clients-3.4.0.jar &&
+        wget -nc -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.12.0/commons-pool2-2.12.0.jar &&
+        echo '📦 Downloading Hadoop-AWS JAR...' &&
+        wget -nc -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar &&
+        wget -nc -q -P /opt/spark/jars/ https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar &&
         echo '✅ JAR download complete!' &&
         cd /opt/spark && ./entrypoint.sh notebook
     volumes:
-      - ../warehouse:/home/iceberg/warehouse
+      - ../warehouse:/home/iceberg/warehouse   # ✅ Đã có, Iceberg data files persist
       - ../notebooks:/home/iceberg/notebooks/notebooks
       - ../data_source:/home/iceberg/data
     ports:
@@ -75,6 +82,10 @@ services:
       - 10001:10001
     networks:
       iceberg_net:
+    depends_on:
+      - minio
+      - nessie
+      - kafka
 
   dremio:
     image: dremio/dremio-oss:24.0.0
@@ -86,12 +97,12 @@ services:
       - 9047:9047
       - 31010:31010
       - 32010:32010
+    # FIX 4: Mount volume để Dremio config không mất
+    volumes:
+      - dremio-data:/opt/dremio/data
     networks:
       iceberg_net:
 
-# ==========================================
-  # THÊM MỚI: HẠ TẦNG KAFKA (CONFLUENT - CHUẨN CÔNG NGHIỆP)
-  # ==========================================
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.3
     container_name: zookeeper
@@ -100,6 +111,10 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    # FIX 5: Mount volume để Zookeeper không mất coordination data
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
     networks:
       iceberg_net:
 
@@ -118,6 +133,12 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # FIX 6: Tăng retention để không mất messages khi restart
+      KAFKA_LOG_RETENTION_HOURS: 168        # Giữ 7 ngày
+      KAFKA_LOG_RETENTION_BYTES: -1         # Không giới hạn size
+    # FIX 7: Mount volume để Kafka không mất topics/offsets
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     networks:
       iceberg_net:
 
@@ -125,5 +146,9 @@ networks:
   iceberg_net:
 
 volumes:
-  minio-data:
-  maven-cache:
+  minio-data:         # ✅ Đã có
+  nessie-data:        # FIX 1 - Nessie catalog metadata
+  dremio-data:        # FIX 4 - Dremio config
+  zookeeper-data:     # FIX 5 - Zookeeper data
+  zookeeper-log:      # FIX 5 - Zookeeper log
+  kafka-data:         # FIX 7 - Kafka topics & offsets
