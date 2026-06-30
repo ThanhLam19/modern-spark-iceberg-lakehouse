@@ -1,6 +1,6 @@
 # 1. FILE HẠ TẦNG VÀ DỮ LIỆU
 # Bỏ qua các thư mục chứa dữ liệu vật lý của IcebergMinIODocker
-data/
+data_source/
 logs/
 tmp/
 

@@ -35,14 +35,14 @@ services:
       - minio-data:/data          # ✅ Đã có sẵn
 
   nessie:
-    image: projectnessie/nessie:0.50.0
+    image: ghcr.io/projectnessie/nessie:0.99.0
     container_name: nessie
     user: "root"
     ports:
       - 19120:19120
     # FIX 1: Thêm config để Nessie dùng RocksDB thay vì in-memory
     environment:
-      - NESSIE_VERSION_STORE_TYPE=ROCKS
+      - NESSIE_VERSION_STORE_TYPE=ROCKSDB
       - NESSIE_VERSION_STORE_PERSIST_ROCKS_DATABASE_PATH=/nessie/data
     # FIX 2: Mount volume để catalog metadata không mất khi restart
     volumes:
@@ -75,6 +75,7 @@ services:
       - ../warehouse:/home/iceberg/warehouse   # ✅ Đã có, Iceberg data files persist
       - ../notebooks:/home/iceberg/notebooks/notebooks
       - ../data_source:/home/iceberg/data
+      - ../src:/home/iceberg/src
     ports:
       - 8888:8888
       - 8080:8080
@@ -88,11 +89,11 @@ services:
       - kafka
 
   dremio:
-    image: dremio/dremio-oss:24.0.0
+    image: dremio/dremio-oss:26.0.5
     container_name: dremio
     user: dremio
     environment:
-      - DREMIO_MAX_MEMORY_SIZE_MB=8192
+      - DREMIO_MAX_MEMORY_SIZE_MB=4096
     ports:
       - 9047:9047
       - 31010:31010
